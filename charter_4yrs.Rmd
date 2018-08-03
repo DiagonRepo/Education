@@ -107,7 +107,7 @@ remove_common_columns = function(dframe) {
   
   # Remove all _TARG, _MET, _SIG, columns which are just metadata about whether targets were met
   # or whether columns were significant.
-  dframe = remove_columns_like(dframe, c("_TARG", "_MET", "_SIG", "_NUM", "_GROW"))
+  dframe = remove_columns_like(dframe, c("TARGET", "_TARG", "_MET", "_SIG", "_NUM", "_GROW"))
 
   # Remove rows with YR_RND = Yes because they have mostly NA columns
   dframe = subset(dframe, subset = dframe$YR_RND != 'Yes', select =!(colnames(dframe) %in% c('YR_RND')))
@@ -150,7 +150,7 @@ conv_factor = function(dframe, columns_to_factor) {
 
 # convert all columsn to numeric
 conv_numeric = function(dframe, columns_to_numeric) {
-  for(col in num_pred) {
+  for(col in columns_to_numeric) {
     if(col %in% colnames(dframe[0,])) {
       dframe[, col] = as.numeric(dframe[, col])
     }
@@ -792,7 +792,6 @@ In the end, the largest influencers of performance are:
 * PCT_AA and PCT_PI - the presence of some disadvantaged minority and ethnic groups
 
 It's important to note that these influencers illustrate correlation and not causation.
-
 
 
 
