@@ -245,24 +245,27 @@ data_2004 = remove_common_columns(data_2004)
 data_2004 = remove_columns_like(data_2004, c("_API04", "_API03"))
 
 # Remove rows with MEDIAN13 or MEDIAN12 = NA
-#data_2004 = subset(data_2004, subset = !is.na(data_2004$MEDIAN04) | !is.na(data_2004$MEDIAN03))
+data_2004 = subset(data_2004, subset = !is.na(data_2004$MEDIAN04) | !is.na(data_2004$MEDIAN03))
 
 # Iterate with any columns that have NAs: either transfrom the NA to something else, 
 # or remove the column, or remove the row.
-# Remove columns if they don"t look like they're needed according to this dataset's record layout
+# Remove columns if they don't look like they're needed according to this dataset's record layout
 # (https://www.cde.ca.gov/ta/ac/ap/reclayout13g.asp)
 other_cols = show_columns_with_na(data_2004)
 data_2004 = remove_columns(data_2004, other_cols)
-data_2004 = na.omit(data_2004)
+data_2004 = na.omit(data_2004);
 
+str(data_2004)
+  
 # convert columns to factor
 data_2004 = conv_factor(data_2004, fact_columns)
 
 # convert columns to numeric
 data_2004 = conv_numeric(data_2004, num_columns)
+data_2004 = na.omit(data_2004);
+
 nrow(data_2004)
 ncol(data_2004)
-
 ```
 
 
@@ -488,20 +491,95 @@ pairs(subset(data_2013,select=c('API13', 'MEALS', 'AVG_ED')))
 #################
 # 2004
 #################
-#   
-# mod_2004 = lm(API04  ~ PCT_AS +  log(PCT_HI)  + PCT_WH   +   DMOB + PCT_RESP +  (AVG_ED) +  ENROLL , data = data_2004_trn )
-# 
-# 
-# # check assumptions
-# diagnostics(mod_2004)
-# 
-# # check how the model is fitting
-# summary(mod_2004)
-# vif(mod_2004) 
-# calc_loocv_rmse(mod_2004)
-# 
-# pred = predict(mod_2004, newdata = data_2004_tst)
-# plot(pred ~ mod_2004$API04, col = "dodgerblue")
+# Full model - Do we need to train/split/test?
+school_model_full = lm(API04 ~ ., data = school_data);
+
+# Find the best models
+best_back_aic = step(school_model_full, direction = "backward", trace = FALSE);
+best_back_bic = step(school_model_full, direction = "backward", trace = FALSE, k = log(length(nrow(school_data))));
+
+best_forward_aic = step(lm(API04 ~ 1, data = school_data), direction = "forward", trace = FALSE, scope = formula(school_model_full));
+best_forward_bic = step(lm(API04 ~ 1, data = school_data), direction = "forward", trace = FALSE, k = log(length(nrow(school_data))), scope = formula(school_model_full));
+
+# Check R2 and LOOCV
+(r2 = c(
+  "Backward AIC" = summary(best_back_aic)$adj.r.squared,
+  "Backward BIC" = summary(best_back_bic)$adj.r.squared,
+  "Forward AIC" = summary(best_forward_aic)$adj.r.squared,
+  "Forward BIC" = summary(best_forward_bic)$adj.r.squared
+));
+
+(loocv = c(
+  "Backward AIC" = calc_loocv_rmse(best_back_aic),
+  "Backward BIC" = calc_loocv_rmse(best_back_bic),
+  "Forward AIC" = calc_loocv_rmse(best_forward_aic),
+  "Forward BIC" = calc_loocv_rmse(best_forward_bic)
+));
+
+r2[which.max(r2)];
+loocv[which.min(loocv)];
+
+# Set best model
+best_model = best_back_aic;
+
+#BP and Shapiro 
+bptest(best_model);
+shapiro.test(resid(best_model)[1:5000])
+
+# Check for influential points
+inf_points = cooks.distance(best_model) > 4 / length(cooks.distance(best_model))
+sum(inf_points)
+
+# Remove influential points
+school_data_clean = school_data[-which(inf_points),];
+
+best_model_clean = lm(formula(best_model), data = school_data_clean);
+
+# Test again...still no dice
+bptest(best_model_clean)
+shapiro.test(resid(best_model_clean)[1:5000]);
+
+# Plots
+qqnorm(resid(best_model_clean), col = "orange")
+qqline(resid(best_model_clean), col = "dodgerblue", lwd = 2)
+
+plot(fitted(best_model_clean),
+  resid(best_model_clean),
+  main = "Fitted vs Residuals",
+  xlab = "Fitted",
+  ylab = "Residuals",
+  col = "orange",
+  pch = 20
+);
+
+formula(best_model_clean)
+summary(best_model_clean)
+round(cor(school_data_clean[, !(names(school_data_clean) %in% c("DFC"))]), 2)
+vif(best_model_clean)
+
+# Removed some highly colinear columns and tested with anova. This seems to be
+# the best model.
+best_model_clean_small = lm(API04 ~ PCT_AA +  PCT_FI + PCT_WH + 
+    SD_NUM + MEALS + EL + SMOB + NOT_HSG + SOME_COL + AVG_ED + 
+   ENROLL + PARENT_OPT + SCI + CBMOB, data = school_data_clean);
+
+
+bptest(best_model_clean_small)
+shapiro.test(resid(best_model_clean_small)[1:5000]);
+
+vif(best_model_clean_small)
+summary(best_model_clean_small)
+
+qqnorm(resid(best_model_clean_small), col = "orange")
+qqline(resid(best_model_clean_small), col = "dodgerblue", lwd = 2)
+plot(fitted(best_model_clean_small),
+  resid(best_model_clean_small),
+  main = "Fitted vs Residuals",
+  xlab = "Fitted",
+  ylab = "Residuals",
+  col = "orange",
+  pch = 20
+);
 
 #################
 # 2007
